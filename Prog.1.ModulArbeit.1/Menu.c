@@ -1,7 +1,6 @@
 #include <conio.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <Windows.h>
 #include <stdbool.h>
 #include "Menu.h"
 
@@ -10,40 +9,14 @@
 #define BG_COLOR "\x1b[44m "
 #define BGBG_COLOR "\033[0m"
 
-typedef struct {
-	int Upper;
-	int Lower;
-	int Left;
-	int Right;
-}Padding;
-
-Padding GetPadding(int textWidth, int textHeight) {
-	CONSOLE_SCREEN_BUFFER_INFO csbi;
-	Padding padding;
-	GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-	padding.Left = ((csbi.srWindow.Right - csbi.srWindow.Left + 1) / 2) - textWidth/2;
-	padding.Upper =((csbi.srWindow.Bottom - csbi.srWindow.Top + 1) / 2) - textHeight;
-	return padding;
-}
 const char* MenuOptions[] = {"1. Dezimal -> Hexadezimal","2. Hexadezimal -> Dezimal","3. Abbruch"};
 void DrawMenu(int selection) {
-	int conWidth = 0, conHeight = 0;
 
-	Padding padding;
-	padding = GetPadding(43, 8);
-
-	for (int i = 0; i < padding.Upper; i++)
-		puts("");
-
-	printf_s("%*s %42s\n",padding.Left,BG_COLOR, BGBG_COLOR);
-	printf_s("%*s%5c 1. Dezimal -> Hexadezimal %5c %s%s\n", padding.Left, selection == '1' ? COLOR_SELECTED : BG_COLOR, ' ', ' ', BG_COLOR, BGBG_COLOR);
-	printf_s("%*s %42s\n",padding.Left, BG_COLOR, BGBG_COLOR);
-	printf_s("%*s%5c 2. Hexadezimal -> Dezimal %5c %s%s\n", padding.Left, selection == '2' ? COLOR_SELECTED : BG_COLOR, ' ', ' ', BG_COLOR, BGBG_COLOR);
-	printf_s("%*s %42s\n",padding.Left, BG_COLOR, BGBG_COLOR);
-	printf_s("%*s %42s\n",padding.Left, BG_COLOR, BGBG_COLOR);
-	printf_s("%*s 3. Abbruch %s  %28s\n", padding.Left, selection == '3' ? COLOR_SELECTED : BG_COLOR, BG_COLOR, BGBG_COLOR);
-	printf_s("%*s%43s\n",padding.Left,BG_COLOR, BGBG_COLOR);
-
+	for (int i = 0; i < (sizeof(MenuOptions) / sizeof(char*)); i++) {
+		printf_s("%s %42s\n", BG_COLOR, BGBG_COLOR);
+		printf_s("%s %5c %50s %5c %s%s\n", selection == '1' + i ? COLOR_SELECTED : BG_COLOR, ' ', MenuOptions[i], ' ', BG_COLOR, BGBG_COLOR);
+		printf_s("%s %42s\n", BG_COLOR, BGBG_COLOR);
+	}
 }
 
 const int MIN_OPTION = '1';
@@ -83,14 +56,11 @@ int Menu() {
 }
 
 void DrawAcceptMenu(bool state) {
-	Padding padding = GetPadding(42,3);
 
-	for (int i = 0; i < padding.Upper; i++) {
-		puts("");
-	}
-	printf_s("%*s %42s\n", padding.Left, BG_COLOR, BGBG_COLOR);
-	printf_s("%*s %5c OK  %s %6c %s Cancel %s\n", padding.Left, state ? COLOR_SELECTED : BGBG_COLOR, ' ', BG_COLOR, ' ', state ? "" : COLOR_SELECTED, BGBG_COLOR);
-	printf_s("%*s %42s\n", padding.Left, BG_COLOR, BGBG_COLOR);
+
+	printf_s("%s%42s\n", BG_COLOR, BGBG_COLOR);
+	printf_s("%s%5c OK  %s %6c %s Cancel %s\n",  state ? COLOR_SELECTED : BGBG_COLOR, ' ', BG_COLOR, ' ', state ? "" : COLOR_SELECTED, BGBG_COLOR);
+	printf_s("%s%42s\n", BG_COLOR, BGBG_COLOR);
 
 }
 
