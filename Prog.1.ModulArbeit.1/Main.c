@@ -4,9 +4,9 @@
 #include <limits.h>
 #include "string.h"
 
-void ConvDezHex(int dez, char* o_Res) {
+void ConvDezHex(char* dez, char* o_Res) {
 }
-void ConvHexDez(int hex, char* o_Res) {
+void ConvHexDez(char* hex, char* o_Res) {
 
 }
 
@@ -34,5 +34,5 @@ int main()
 	//	}
 	//	} 
 	//} while (run);
-	//puts("Programm has stops succesfuly");
+	//puts("Program has stops successfully");
 }
