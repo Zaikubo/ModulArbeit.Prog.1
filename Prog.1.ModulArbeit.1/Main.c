@@ -12,25 +12,27 @@ void ConvHexDez(int hex, char* o_Res) {
 
 int main()
 {
-	
-	bool run = true;
-	do {
-		switch (Menu()) {
-		case '1': {
-			ConvDezHex(-1, NULL);
-			break;
-		}
-		case '2': {
-			ConvHexDez(-1, NULL);
-			break;
-		}
-		case '3': {
-			if (AcceptMenu()) {
-				run = false;
-			}
-			break;
-		}
-		} 
-	} while (run);
-	puts("Programm has stops succesfuly");
+	AlternativMenu();
+	//
+	//bool run = true;
+	//do {
+	//	switch (Menu()) {
+	//	case '1': {
+	//		ConverterMenu();
+	//		ConvDezHex(-1, NULL);
+	//		break;
+	//	}
+	//	case '2': {
+	//		ConvHexDez(-1, NULL);
+	//		break;
+	//	}
+	//	case '3': {
+	//		if (AcceptMenu()) {
+	//			run = false;
+	//		}
+	//		break;
+	//	}
+	//	} 
+	//} while (run);
+	//puts("Programm has stops succesfuly");
 }

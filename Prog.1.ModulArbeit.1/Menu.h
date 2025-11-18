@@ -10,4 +10,7 @@
 
 int Menu();
 bool AcceptMenu();
+void ConverterMenu();
+void AlternativMenu();
 #endif // !MENU
+
