@@ -17,8 +17,8 @@
 #define COLOR_ACTIVE "\033[1;107m"
 #define BG_COLOR "\x1b[47m\033[1;30m"
 
-//Limit of our input since Number with more then 20 digits are already bigger then what can be in a long long so we dont have store those. 
-#define INPUT_BUFFER_SIZE 32
+//Limit of our input since Number with more then 20 digits are already larger, then what can be stored in a long long so we dont have to store those.  
+#define INPUT_BUFFER_SIZE 21
 
 enum STATE {
 	CONV_DEZ_HEX = 0,
@@ -31,9 +31,13 @@ typedef struct  {
 	//Well this part is a bit wacky since, I'm misusing a boal as a State, but since we only have 2 modi it works and makes later check simpler to write.
   // true = Decimal -> Hex, false = Hex -> Decimal
 	bool ConvMode;
+	//the same as Conv Mode only this time we save if the user is currently in Input mode (want to input something in the input box).
+	// Normaly you would never want to save it in the main Struct, but for this light weight interface its more convenient to do it anyways.,
+	bool ActivInput;
+
 	char* ErrorMsg;
 	char* ConvResult;
-	char InputBuffer[INPUT_BUFFER_SIZE];
+	char* InputBuffer;
 	int BufferPosIdx;
 	enum STATE CurrSelection;
 }MenuData;
@@ -41,10 +45,10 @@ typedef struct  {
 
 
 void ConvDezHex(char* dez, char* o_Res) {
-	o_Res = *dez;
+	o_Res = "TestDe";
 }
 void ConvHexDez(char* hex, char* o_Res) {
-	o_Res = *hex;
+	o_Res = "Test";
 }
 
 #pragma endregion
@@ -89,10 +93,6 @@ bool AcceptMenu(char* warningMsg) {
 	} while (true);
 }
 
-// this also only works since i defined the size of our input buffer as a macro else i would have to use a parameter,
-bool CheckForInvalidCharackters(char* inputBuffer) {
-
-}
 
 
 void DrawMenu(MenuData* data) { 
@@ -103,7 +103,7 @@ void DrawMenu(MenuData* data) {
 	printf_s("  \x1b(0x    lqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk lqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk x\x1b(B  \n");
 	printf_s("  \x1b(0x    x%s                              %sx x%s                              %sx x\x1b(B  \n", data->ConvMode ? COLOR_ACTIVE : "", BG_COLOR, data->ConvMode ? "" : COLOR_ACTIVE, BG_COLOR);
 	printf_s("  \x1b(0x    x%s\x1b(B%s (N) Dezimal -> Hexadezimal   %s\x1b(0x x\x1b(B%s %s(H) Hexadezimal -> Dezimal   %s\x1b(0x x\x1b(B  \n",
-		// Well this part is a bit chaotic.... hope i can improve it later.
+		//TODO Well this part is a bit chaotic.... hope i can improve it later. Only a temporary solution.
 		data->ConvMode ? COLOR_ACTIVE : "", data->CurrSelection == CONV_DEZ_HEX ? COLOR_SELECTED : "", COLOR_SELECTED_RES BG_COLOR,
 		data->ConvMode ? "" : COLOR_ACTIVE, data->CurrSelection == CONV_HEX_DEZ ? COLOR_SELECTED : "", COLOR_SELECTED_RES BG_COLOR);
 	printf_s("  \x1b(0x    x%s                              %sx x%s                              %sx x\x1b(B  \n", data->ConvMode ? COLOR_ACTIVE : "", BG_COLOR, data->ConvMode ? "" : COLOR_ACTIVE, BG_COLOR);
@@ -112,15 +112,22 @@ void DrawMenu(MenuData* data) {
 	printf_s("  \x1b(0x                                                                      x\x1b(B  \n");
 	printf_s("  \x1b(0x                  %51s x\x1b(B  \n", data->ErrorMsg);
 	printf_s("  \x1b(0x                  lqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk x\x1b(B  \n");
-	printf_s("  \x1b(0x\x1b(B%s%17s %s\x1b(0x\x1b(B %s%45s \x1b(0x x\x1b(B  \n", 
-		data->CurrSelection == INPUT_NUMBER ? COLOR_SELECTED : "", data->ConvMode ? "Input Dezimal" : "Input Hex", COLOR_SELECTED_RES BG_COLOR, data->ConvMode ? "  " : "0x", data->InputBuffer);
+	printf_s("  \x1b(0x\x1b(B%s%17s %s\x1b(0x\x1b(B%s %s%.*s %*s \x1b(0x x\x1b(B  \n", 
+		data->CurrSelection == INPUT_NUMBER ? COLOR_SELECTED : "",
+		data->ConvMode ? "Input Dezimal" : "Input Hex",
+		COLOR_SELECTED_RES BG_COLOR, data->ConvMode ? "  " : "0x",
+		data->ActivInput ? "\033[43m" : "", 
+		data->BufferPosIdx + 1, 
+		data->InputBuffer,
+		63 - data->BufferPosIdx, 
+		COLOR_SELECTED_RES BG_COLOR);
 	printf_s("  \x1b(0x                  mqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj x\x1b(B  \n");
 	printf_s("  \x1b(0x                                                                      x\x1b(B  \n");
 	printf_s("  \x1b(0tqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqu\x1b(B  \n");
 	printf_s("  \x1b(0x                                                                      x\x1b(B  \n");
 	printf_s("  \x1b(0x                  lqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk x\x1b(B  \n");
-	printf_s("  \x1b(0x\x1b(B%17s \x1b(0x\x1b(B %s%45s \x1b(0x x\x1b(B  \n",
-		data->ConvMode ? "Result Hex" : "Result Dezimal", data->ConvMode ? "0x" : "  ", data->ConvResult);
+	printf_s("  \x1b(0x\x1b(B%17s \x1b(0x\x1b(B %s%45s \x1b(0x x\x1b(B  \n",         
+		data->ConvMode ? "Result Hex" : "Result Dezimal", data->ConvMode ? "0x" : "  ", data->ConvResult); // "%.*s" the dot mens we only want to print so many char 
 	printf_s("  \x1b(0x                  mqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj x\x1b(B  \n");
 	printf_s("  \x1b(0mqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj\x1b(B  \n");
 	puts("                                                                            ");
@@ -138,25 +145,32 @@ void DrawMenu(MenuData* data) {
 bool ValidSymbole(char c, bool hexAllowed) {
 	return (((c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')) && hexAllowed) || (c >= '0' && c <= '9');
 }
+// this also only works since i defined the size of our input buffer as a macro else i would have to use a parameter,
+bool CheckForInvalidCharackters(char* inputBuffer) {
+
+}
 
 bool InputLoop(MenuData* data) {
+	DrawMenu(data);
+
 	for (;;) {
 		int input = _getch();
 		switch (input) {
-		case KEY_ENTER: {
-			return true;
-		}
 		case KEY_ESCAPE: {
+			data->ActivInput = false;
 			return false;
 		}
 		case KEY_DELETE: {
-			data->InputBuffer[data->BufferPosIdx--] = ' ';
+			if (data->BufferPosIdx >= 0) {
+				data->BufferPosIdx -= data->BufferPosIdx == 0 ? 0 : 1;
+				data->InputBuffer[data->BufferPosIdx] = '\0';
+			}
 			break;
 		}
 		default: {
-			if (ValidSymbole(input, data->ConvMode) && data->BufferPosIdx < INPUT_BUFFER_SIZE) {
+			if (ValidSymbole(input, !data->ConvMode) && data->BufferPosIdx < 20) {
 				data->InputBuffer[data->BufferPosIdx++] = input;
-				if (data->ConvMode) {
+				if (data->ConvMode ) {
 					ConvDezHex(data->InputBuffer, data->ConvResult);
 				}
 				else {
@@ -177,16 +191,16 @@ bool InputLoop(MenuData* data) {
 
 void Menu() {
 
-	MenuData data;
-	// init Values
-  data.ConvMode = true;
-	data.ErrorMsg = "";
-	data.ConvResult = "";
-	for (int i = 0; i < INPUT_BUFFER_SIZE; i++) {
-		data.InputBuffer[i]="\0";
-	}
-	data.BufferPosIdx = 0;
-	data.CurrSelection = INPUT_NUMBER;
+	// init Values, we have to do it this way because of how C handles structs, for the people who a curios you can do that since the C99 standard
+	MenuData data = {
+		.ActivInput = false,
+    .ConvMode = true,
+	  .ErrorMsg = " ",
+	  .ConvResult = " ",
+		.BufferPosIdx = 0,
+		.CurrSelection = INPUT_NUMBER,
+	  .InputBuffer = calloc(INPUT_BUFFER_SIZE, sizeof(char))
+	};
 
 	for (;;) {
 		DrawMenu(&data);
@@ -206,7 +220,7 @@ void Menu() {
 		}
 		case TWO_BYTE_IN: {
 			arrK = _getch();
-			// Not optimal if we add more Conv modi this will get a bit confusion an unreadable. And its hard coded -.- 
+			// Not optimal if we add more Conv modi, this will get a bit more confusion and unreadable. And its hard coded -.- (LEN)
 			if (data.CurrSelection == CONV_DEZ_HEX || data.CurrSelection == CONV_HEX_DEZ) {
 				if (arrK == KEY_LEFT) {
 					data.CurrSelection = CONV_DEZ_HEX;
@@ -230,6 +244,7 @@ void Menu() {
 		}
 		case KEY_ESCAPE: {
 			if (AcceptMenu("Wollen sie das Programm beenden?")) {
+				free(data.InputBuffer);
 				puts("\033[0;37mProgramm has been Stopped\033[0;0m");
 				return;
 			}
@@ -246,11 +261,13 @@ void Menu() {
 				break;
 			}
 			case INPUT_NUMBER: {
+				data.ActivInput = true;
 				InputLoop(&data);
 				break;
 			}
 			case END: {
 				if (AcceptMenu("Wollen sie das Programm wirklich beenden?")) {
+					free(data.InputBuffer); 
 					puts("\033[0;37mProgramm has been Stopped\033[0;0m");
 					return;
 				}
