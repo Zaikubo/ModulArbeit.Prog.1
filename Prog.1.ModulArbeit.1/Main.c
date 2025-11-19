@@ -41,10 +41,10 @@ typedef struct  {
 
 
 void ConvDezHex(char* dez, char* o_Res) {
-	o_Res = dez;
+	o_Res = *dez;
 }
 void ConvHexDez(char* hex, char* o_Res) {
-	o_Res = hex;
+	o_Res = *hex;
 }
 
 #pragma endregion
@@ -74,7 +74,7 @@ bool AcceptMenu(char* warningMsg) {
 		if (input == KEY_ESCAPE) {
 			return false;
 		}
-		if (input == 224) {
+		if (input == TWO_BYTE_IN) {
 			switch (_getch()) {
 			case KEY_RIGHT: { //Arror Right
 				acceptState = false;
@@ -139,7 +139,7 @@ bool ValidSymbole(char c, bool hexAllowed) {
 	return (((c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')) && hexAllowed) || (c >= '0' && c <= '9');
 }
 
-bool InputLoop() {
+bool InputLoop(MenuData* data) {
 	for (;;) {
 		int input = _getch();
 		switch (input) {
@@ -149,13 +149,30 @@ bool InputLoop() {
 		case KEY_ESCAPE: {
 			return false;
 		}
+		case KEY_DELETE: {
+			data->InputBuffer[data->BufferPosIdx--] = ' ';
+			break;
+		}
 		default: {
-
+			if (ValidSymbole(input, data->ConvMode) && data->BufferPosIdx < INPUT_BUFFER_SIZE) {
+				data->InputBuffer[data->BufferPosIdx++] = input;
+				if (data->ConvMode) {
+					ConvDezHex(data->InputBuffer, data->ConvResult);
+				}
+				else {
+					ConvHexDez(data->InputBuffer, data->ConvResult);
+				}
+			}
+			else {
+				
+			}
 			break;
 		}
 		}
+		DrawMenu(data);
 	}
 }
+	
 
 
 void Menu() {
@@ -165,7 +182,9 @@ void Menu() {
   data.ConvMode = true;
 	data.ErrorMsg = "";
 	data.ConvResult = "";
-	data.InputBuffer[0] = "";
+	for (int i = 0; i < INPUT_BUFFER_SIZE; i++) {
+		data.InputBuffer[i]="\0";
+	}
 	data.BufferPosIdx = 0;
 	data.CurrSelection = INPUT_NUMBER;
 
@@ -227,6 +246,7 @@ void Menu() {
 				break;
 			}
 			case INPUT_NUMBER: {
+				InputLoop(&data);
 				break;
 			}
 			case END: {
