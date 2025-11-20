@@ -45,6 +45,8 @@ typedef struct  {
 
 
 void ConvDezHex(char* dez, char* o_Res) {
+	long long inputValue;
+	sscanf_s(dez, "%ld", &inputValue);
 	o_Res = "TestDe";
 }
 void ConvHexDez(char* hex, char* o_Res) {
@@ -59,9 +61,9 @@ void ConvHexDez(char* hex, char* o_Res) {
 
 
 void DrawAcceptMenu(bool state, char* warningMsg) {
-	puts("\x1b(0lqqqqqqqqqqqqq\x1b(B Do you want to Continue ? \x1b(0qqqqqqqqqqqqqk\x1b(B");
-	printf_s("\x1b(0x\x1b(B%s%42s\x1b(0x\x1b(B\n", BG_COLOR, "");
-	printf_s("\x1b(0x\x1b(B%s %2s OK  %2s %6c %s Cancel %s\x1b(0x\x1b(B\n", BG_COLOR, state ? COLOR_SELECTED : "", BG_COLOR, ' ', state ? "" : COLOR_SELECTED, "");
+	printf_s("%s\x1b(0lqqqqqqqqqqqqq\x1b(B Do you want to Continue ? \x1b(0qqqqqqqqqqqqqk\x1b(B\n",BG_COLOR);
+	printf_s("\x1b(0x%53sx\x1b(B\n", "");
+	printf_s("\x1b(0x\x1b(B%s %2s OK  %2s %30s %s Cancel %2s\x1b(0x\x1b(B\n", COLOR_SELECTED_RES BG_COLOR, state ? COLOR_SELECTED : "", COLOR_SELECTED_RES BG_COLOR, "", state ? "" : COLOR_SELECTED , "");
 	printf_s("\x1b(0x\x1b(B%s%42s\x1b(0x\x1b(B\n", BG_COLOR, "");
 	puts("\x1b(0mqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj\x1b(B\x1b[0;0m");
 }
@@ -195,7 +197,7 @@ void Menu() {
 	MenuData data = {
 		.ActivInput = false,
     .ConvMode = true,
-	  .ErrorMsg = " ",
+	  .ErrorMsg = calloc(INPUT_BUFFER_SIZE + 5 , sizeof(char)),
 	  .ConvResult = " ",
 		.BufferPosIdx = 0,
 		.CurrSelection = INPUT_NUMBER,
