@@ -13,44 +13,54 @@
 #define KEY_RIGHT   0x004d // arr 77
 
 #define COLOR_SELECTED_RES "\033[0;30m"
-#define COLOR_SELECTED "\033[5;34m"
-#define COLOR_ACTIVE "\033[1;107m"
-#define BG_COLOR "\x1b[47m\033[1;30m"
+#define COLOR_SELECTED     "\033[5;34m"
+#define COLOR_ACTIVE       "\033[1;107m"
+#define BG_COLOR           "\x1b[47m\033[1;30m"
 
 //Limit of our input since Number with more then 20 digits are already larger, then what can be stored in a long long so we dont have to store those.  
-#define INPUT_BUFFER_SIZE 21
+#define INPUT_BUFFER_SIZE   21
+#define LIMIT_DEZIMAL_INPUT 19
+#define LIMIT_HEX_INPUT     16
+#define ERROR_MESSAGE_LIMIT 5
 
 enum STATE {
-	CONV_DEZ_HEX = 0,
-	CONV_HEX_DEZ,
+	DEZIMAL_TO_HEX_SEL = 0,
+	HEX_TO_DEZIMAL_SEL,
 	INPUT_NUMBER,
-	END,
+	END ,
+};
+enum ConvMode {
+	DEZIMAL_TO_HEX = 0,
+	HEX_TO_DEZIMAL,
 };
 
 typedef struct  {
-	//Well this part is a bit wacky since, I'm misusing a boal as a State, but since we only have 2 modi it works and makes later check simpler to write.
-  // true = Decimal -> Hex, false = Hex -> Decimal
-	bool ConvMode;
-	//the same as Conv Mode only this time we save if the user is currently in Input mode (want to input something in the input box).
-	// Normaly you would never want to save it in the main Struct, but for this light weight interface its more convenient to do it anyways.,
-	bool ActivInput;
-
-	char* ErrorMsg;
+	int ErrorFlags;
+	/*
+	* 1 << 0 = Invalid Input
+	* 1 << 1 = Invalid exceed limits
+	* 1 << 2 = Invalid char in input String: can be trigger after switching from hex->dec to dec->Hex
+	* 1 << 3 = Invalid ConvMode
+	*/
 	char* ConvResult;
 	char* InputBuffer;
 	int BufferPosIdx;
 	int ConvResulSize;
+	enum ConvMode ActivConvMode;
 	enum STATE CurrSelection;
 }MenuData;
+
 #pragma region Converter
 
 #pragma region Helper
 
-void clearArray(char* buf, int size) {
-	for (int i = 0; i < size; i++) {
-		buf[i] = "\0";
+void ClearArray(char* buf, int* size) {
+	for (int i = 0; i < (*size); i++) {
+		buf[i] = '\0';
 	}
+	(*size) = 0;
 }
+
 // return a bool if the new character is allowed in a hex or decimal 
 bool ValidSymbole(char c, bool hexAllowed) {
 	return (((c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')) && hexAllowed) || (c >= '0' && c <= '9');
@@ -72,7 +82,7 @@ void ConvDezHex(char* dez, int size, char* o_Res, int* o_ResSize) {
 	char tempRes[30] = " ";
 
 	int pos = 0;
-	clearArray(o_Res, *o_ResSize);
+	ClearArray(o_Res, o_ResSize);
 	if (sscanf_s(dez, "%llu", &inputValue) && size > 0) {
 		if (inputValue == 0) {
 			*o_ResSize = 1;
@@ -105,7 +115,7 @@ void ConvDezHex(char* dez, int size, char* o_Res, int* o_ResSize) {
 	}
 }
 void ConvHexDez(char* hex, int size, char* o_Res, int* o_ResSize) {
-	clearArray(o_Res, *o_ResSize);
+	ClearArray(o_Res, o_ResSize);
 	unsigned long long result = 0;
 	if (CheckForInvalidCharackters(hex, size, true)) {
 		for (int i = 0; i < size; i++) {
@@ -148,7 +158,7 @@ void ConvHexDez(char* hex, int size, char* o_Res, int* o_ResSize) {
 #pragma region  Menu
 
 
-
+// Draw the "are you sure!" menu to check if the user knows what he is doing
 void DrawAcceptMenu(bool state, char* warningMsg) {
 	printf_s("%s\x1b(0lqqqqqqqqqqqqq\x1b(B Do you want to Continue ? \x1b(0qqqqqqqqqqqqqk\x1b(B\n",BG_COLOR);
 	printf_s("\x1b(0x\x1b(B%45s        \x1b(0x\x1b(B\n", warningMsg);
@@ -186,205 +196,198 @@ bool AcceptMenu(char* warningMsg) {
 }
 
 
+void GetErrorMessages(int* o_NumOfMsg, char** o_Messages, int errorFlags) {
+	if (!errorFlags) {
+		return;
+	}
+	*o_NumOfMsg = 0;
+	if (errorFlags & 1 << 0) {
+		o_Messages[(*o_NumOfMsg)++] = "[Fehler] Fehlerhaften Charakter eingegeben!";
+	}
+	if (errorFlags & 1 << 1) {
+		o_Messages[(*o_NumOfMsg)++] = "[Fehler] Ueberschreitung des eingabe Limits!";
+	}
+	if (errorFlags & 1 << 2) {
+		o_Messages[(*o_NumOfMsg)++] = "[Fehler] Ungueltiges Symbole in der Eingabe!";
+	}	
+	if (errorFlags & 1 << 3) {
+		o_Messages[(*o_NumOfMsg)++] = "[Fehler] Ungueltiger Convertierungs Modus!";
+	}
+}
 
-void DrawMenu(MenuData* data) { 
+void DrawMenu(MenuData* displayData) { 
+
+	char* errorMessages[ERROR_MESSAGE_LIMIT];
+	int numOfErros = 0;
+	GetErrorMessages(&numOfErros, errorMessages, displayData->ErrorFlags);
+	
+	//to make the draw function more readable, will convert i convmode Enum to a bool.
+	// true = Dec, false = Hex
+	bool isDecMode = displayData->ActivConvMode == DEZIMAL_TO_HEX;
+
 	system("cls");
 	puts(BG_COLOR "                                                                            ");
 	printf_s("  \x1b(0lqqqqqqqqqqqqqqqqqqqqqqqqqqqqqu \x1b(BConverter\x1b(0 tqqqqqqqqqqqqqqqqqqqqqqqqqqqqk\x1b(B  \n");
 	printf_s("  \x1b(0x                                                                      x\x1b(B  \n");
 	printf_s("  \x1b(0x    lqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk lqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk x\x1b(B  \n");
-	printf_s("  \x1b(0x    x%s                              %sx x%s                              %sx x\x1b(B  \n", data->ConvMode ? COLOR_ACTIVE : "", BG_COLOR, data->ConvMode ? "" : COLOR_ACTIVE, BG_COLOR);
+	printf_s("  \x1b(0x    x%s                              %sx x%s                              %sx x\x1b(B  \n", isDecMode ? COLOR_ACTIVE : "", BG_COLOR, isDecMode ? "" : COLOR_ACTIVE, BG_COLOR);
 	printf_s("  \x1b(0x    x%s\x1b(B%s (N) Dezimal -> Hexadezimal   %s\x1b(0x x\x1b(B%s %s(H) Hexadezimal -> Dezimal   %s\x1b(0x x\x1b(B  \n",
 		//TODO Well this part is a bit chaotic.... hope i can improve it later. Only a temporary solution.
-		data->ConvMode ? COLOR_ACTIVE : "", data->CurrSelection == CONV_DEZ_HEX ? COLOR_SELECTED : "", COLOR_SELECTED_RES BG_COLOR,
-		data->ConvMode ? "" : COLOR_ACTIVE, data->CurrSelection == CONV_HEX_DEZ ? COLOR_SELECTED : "", COLOR_SELECTED_RES BG_COLOR);
-	printf_s("  \x1b(0x    x%s                              %sx x%s                              %sx x\x1b(B  \n", data->ConvMode ? COLOR_ACTIVE : "", BG_COLOR, data->ConvMode ? "" : COLOR_ACTIVE, BG_COLOR);
+		isDecMode ? COLOR_ACTIVE : "", displayData->CurrSelection == DEZIMAL_TO_HEX_SEL ? COLOR_SELECTED : "", COLOR_SELECTED_RES BG_COLOR,
+		isDecMode ? "" : COLOR_ACTIVE, displayData->CurrSelection == HEX_TO_DEZIMAL_SEL ? COLOR_SELECTED : "", COLOR_SELECTED_RES BG_COLOR);
+	printf_s("  \x1b(0x    x%s                              %sx x%s                              %sx x\x1b(B  \n", isDecMode ? COLOR_ACTIVE : "", BG_COLOR, isDecMode ? "" : COLOR_ACTIVE, BG_COLOR);
 	printf_s("  \x1b(0x    mqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj mqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj x\x1b(B  \n");
 	printf_s("  \x1b(0x                                                                      x\x1b(B  \n");
 	printf_s("  \x1b(0x                                                                      x\x1b(B  \n");
-	printf_s("  \x1b(0x           \x1b(B %23s\x1b(0                                   x\x1b(B %2d \n", data->ConvMode ? "0-9" : "0-9, a-f, A-F", data->BufferPosIdx);
+	printf_s("  \x1b(0x           \x1b(B %23s\x1b(0                                   x\x1b(B  \n", isDecMode ? "0-9" : "0-9, a-f, A-F");
 	printf_s("  \x1b(0x                  lqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk x\x1b(B  \n");
-	printf_s("  \x1b(0x\x1b(B%s%17s %s\x1b(0x\x1b(B%s %s%.*s %*s \x1b(0x x\x1b(B  \n", 
-		data->CurrSelection == INPUT_NUMBER ? COLOR_SELECTED : "",
-		data->ConvMode ? "Input Dezimal" : "Input Hex",
-		COLOR_SELECTED_RES BG_COLOR, data->ConvMode ? "  " : "0x",
-		data->ActivInput ? "\033[43m" : "", 
-		data->BufferPosIdx + 1, 
-		data->InputBuffer,
-		63 - data->BufferPosIdx, 
-		COLOR_SELECTED_RES BG_COLOR);
+	printf_s("  \x1b(0x\x1b(B%s%17s %s\x1b(0x\x1b(B %s%.*s\x1b[5m_\x1b[25m%*s                               \x1b(0x x\x1b(B  \n", 
+		displayData->CurrSelection == INPUT_NUMBER ? COLOR_SELECTED : "",
+		isDecMode ? "Input Dezimal" : "Input Hex",
+		COLOR_SELECTED_RES BG_COLOR,
+		isDecMode ? "  " : "0x",
+		displayData->BufferPosIdx + 1,
+		displayData->InputBuffer,
+		INPUT_BUFFER_SIZE - displayData->BufferPosIdx,
+		BG_COLOR);
 	printf_s("  \x1b(0x                  mqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj x\x1b(B  \n");
-	printf_s("  \x1b(0x                  \x1b(B\x1b[0;47;31m%45s\x1b(0      \x1b[0;0m%s x\x1b(B  \n", data->ErrorMsg, BG_COLOR);
+	//printf_s("  \x1b(0x                  \x1b(B\x1b[0;47;31m%45s\x1b(0      \x1b[0;0m%s x\x1b(B  \n", displayData->ErrorMsg, BG_COLOR);
 	printf_s("  \x1b(0tqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqu\x1b(B  \n");
 	printf_s("  \x1b(0x                                                                      x\x1b(B  \n");
 	printf_s("  \x1b(0x                  lqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk x\x1b(B  \n");
 	printf_s("  \x1b(0x\x1b(B%17s \x1b(0x\x1b(B %s%s%*s \x1b(0x x\x1b(B  \n",         
-		data->ConvMode ? "Result Hex" : "Result Dezimal", data->ConvMode ? "0x" : "  ", data->ConvResult, 64 - data->ConvResulSize, COLOR_SELECTED_RES BG_COLOR); // "%.*s" the dot means we only want to print so many char 
+		isDecMode ? "Result Hex" : "Result Dezimal", isDecMode ? "0x" : "  ", displayData->ConvResult, 64 - displayData->ConvResulSize, COLOR_SELECTED_RES BG_COLOR); // "%.*s" the dot means we only want to print so many char 
 	printf_s("  \x1b(0x                  mqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj x\x1b(B  \n");
 	printf_s("  \x1b(0mqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj\x1b(B  \n");
 	printf_s("                                                                            %s\n", COLOR_SELECTED_RES);
-	printf_s("%s %s(ESC) End                                                                  %s\n", BG_COLOR, data->CurrSelection == END ? COLOR_SELECTED : "", COLOR_SELECTED_RES);
+	printf_s("%s %s(ESC) End                                                                  %s\n", BG_COLOR, displayData->CurrSelection == END ? COLOR_SELECTED : "", COLOR_SELECTED_RES);
 	printf_s("%s                                                                            \x1b[0;0m\n", BG_COLOR);
-	puts("Enter: Select / Convert   N/H: Swap between Convert Modi     Esc: End Programm");
+	puts("Enter: Auswahl / Konvertiert   N/H: Wechsel zwischen Konvertier Modi     Esc: Beende Programm");
 	puts("\n         ^");
 	puts("         |");
-	puts("Arrow <--o-->  Keys zum Selectieren");
+	puts("Arrow <--o-->  Keys zum Selektieren");
 	puts("         |");
 	puts("         v");
-	if (CheckForInvalidCharackters(data->InputBuffer, data->BufferPosIdx, !data->ConvMode)) {
-		data->ErrorMsg = "";
-	}
-}
-
-
-
-bool InputLoop(MenuData* data) {
-	DrawMenu(data);
-
-	for (;;) {
-		int input = _getch();
-		switch (input) {
-		case KEY_ESCAPE: {
-			return false;
-		}
-		case KEY_DELETE: {
-			if (data->BufferPosIdx >= 0) {
-				data->BufferPosIdx -= data->BufferPosIdx == 0 ? 0 : 1;
-				data->InputBuffer[data->BufferPosIdx] = '\0';
-			}
-			if (data->ConvMode) {
-				ConvDezHex(data->InputBuffer, data->BufferPosIdx, data->ConvResult, &data->ConvResulSize);
-			}
-			else {
-				ConvHexDez(data->InputBuffer, data->BufferPosIdx, data->ConvResult, &data->ConvResulSize);
-			}
-			break;
-		}
-		default: {
-			if (ValidSymbole(input, !data->ConvMode) && ((data->BufferPosIdx < 19 && data->ConvMode) || ((data->BufferPosIdx < 16 && !data->ConvMode)) )) {
-				data->InputBuffer[data->BufferPosIdx++] = input;
-				if (data->ConvMode ) {
-					ConvDezHex(data->InputBuffer, data->BufferPosIdx, data->ConvResult, &data->ConvResulSize);
-				}
-				else {
-					ConvHexDez(data->InputBuffer, data->BufferPosIdx, data->ConvResult, &data->ConvResulSize);
-				}
-			}
-			else {
-				if ((data->BufferPosIdx >= 19 && data->ConvMode) || (data->BufferPosIdx >= 16 && !data->ConvMode)) {
-					data->ErrorMsg = "[Fehler]: Convertierungs Limit erreicht";
-				}
-				else {
-					data->ErrorMsg = "[Fehler]: Invalide Eingabe";
-				}
-			}
-			break;
-		}
-		}
-		DrawMenu(data);
-	}
 }
 	
-void CleanUp(MenuData* data) {
-	free(data->InputBuffer);
-	free(data->ConvResult);
-	free(data->ErrorMsg);
+// since we allocated memory for our Input and Output buffer we have to free them at the end.
+void CleanUp(MenuData* displayData) {
+	free(displayData->InputBuffer);
+	free(displayData->ConvResult);
 	puts("\033[0;37mProgramm has been Stopped\033[0;0m");
+}
+
+int ArrowKeyHandling(int key, enum STATE* io_State) {
+	int retCode = 1;
+	switch (key) {
+	case KEY_UP: {
+		*io_State = max(max((*io_State), HEX_TO_DEZIMAL_SEL) - 1, HEX_TO_DEZIMAL_SEL);
+		break; }
+	case KEY_DOWN: {
+		*io_State = min(max((*io_State) + 1, INPUT_NUMBER), END);
+		break; }
+	case KEY_RIGHT: { 
+		if ((*io_State) == DEZIMAL_TO_HEX_SEL) {
+			*io_State = min((*io_State) + 1, HEX_TO_DEZIMAL_SEL);
+		}
+		break; }
+	case KEY_LEFT: {
+		if ((*io_State) == HEX_TO_DEZIMAL_SEL) {
+			*io_State = max((*io_State) - 1, DEZIMAL_TO_HEX);
+		}
+		break;
+	}
+	default: {
+		retCode = -1;
+		break;
+	}
+	}
+	return retCode;
 }
 
 void Menu() {
 
 	// Initialize values using designated initializers (allowed since C99)
-	MenuData data = {
-		.ActivInput = false,
-		.ConvMode = true,
-		.ErrorMsg = calloc(40 , sizeof(char)),
+	MenuData displayData = {
+		.ErrorFlags = 0,
 		.ConvResult = calloc(INPUT_BUFFER_SIZE * 2 , sizeof(char)),
 		.ConvResulSize = 0,
 		.BufferPosIdx = 0,
 		.CurrSelection = INPUT_NUMBER,
+		.ActivConvMode = DEZIMAL_TO_HEX,
 	  .InputBuffer = calloc(INPUT_BUFFER_SIZE, sizeof(char))
 	};
-
-	for (;;) {
-		DrawMenu(&data);
-		int inC = _getch();
-		int arrK;
-
-		switch (inC) {
-		case 'h':
-		case 'H': {
-			data.ConvMode = false;
-			break;
+	bool showMenu = true;
+	// The main Loop for our Men, everything that we do in the menu is happing in here.
+	while(showMenu) {
+		DrawMenu(&displayData);
+		int input = _getch();
+		int inSecoundary;
+		switch (input) {
+		case KEY_ENTER: {
+			switch (displayData.CurrSelection) {
+				case HEX_TO_DEZIMAL_SEL: { 
+					displayData.ActivConvMode = HEX_TO_DEZIMAL;
+					break; }
+				case DEZIMAL_TO_HEX_SEL: { 
+					displayData.ActivConvMode = DEZIMAL_TO_HEX;
+					break; }
+				default: {
+					// we just ignore this.
+					break;
+				}
+		  }
+			if (displayData.CurrSelection == END) {
+				showMenu = false;
+				CleanUp(&displayData);
+			}
 		}
-		case 'n':
-		case 'N': {
-			data.ConvMode = true;
-			if (!CheckForInvalidCharackters(data.InputBuffer, data.BufferPosIdx, false)) {
-				data.ErrorMsg = "[Fehler]: Invalid Input";
+		case KEY_DELETE: {
+			if (displayData.BufferPosIdx >= 0) {
+				displayData.InputBuffer[displayData.BufferPosIdx] = '\0';
+				displayData.BufferPosIdx = max(displayData.BufferPosIdx - 1, 0);
 			}
 			break;
 		}
+		case KEY_ESCAPE: { 
+			showMenu = false;
+			CleanUp(&displayData);
+			break; }
 		case TWO_BYTE_IN: {
-			arrK = _getch();
-			// Not optimal if we add more Conv modi, this will get a bit more confusion and unreadable. And its hard coded -.- (LEN)
-			if (data.CurrSelection == CONV_DEZ_HEX || data.CurrSelection == CONV_HEX_DEZ) {
-				if (arrK == KEY_LEFT) {
-					data.CurrSelection = CONV_DEZ_HEX;
-				}
-				if (arrK == KEY_RIGHT) {
-					data.CurrSelection = CONV_HEX_DEZ;
-				}
-				if (arrK == KEY_DOWN) {
-					data.CurrSelection = INPUT_NUMBER;
-				}
+			inSecoundary = _getch();
+			int retCode = ArrowKeyHandling(inSecoundary, &displayData.CurrSelection);
+			if (retCode != 1) {
+				displayData.ErrorFlags |= 1 << 0; // set error flag for invalid input character
+			}
+			break;
+		}
+	  default: {
+			if (ValidSymbole(input, displayData.ActivConvMode == HEX_TO_DEZIMAL)) {
+				// we use a switch since we could in theory expand the capabilities of the converter to binary or octa
+				int writePos = displayData.BufferPosIdx;
+				switch (displayData.ActivConvMode) {
+				case HEX_TO_DEZIMAL: {
+					if (writePos < LIMIT_HEX_INPUT) {
+						displayData.InputBuffer[displayData.BufferPosIdx++] = input;
+					}
+					break; }
+				case DEZIMAL_TO_HEX: {
+					if (writePos < LIMIT_DEZIMAL_INPUT) {
+						displayData.InputBuffer[displayData.BufferPosIdx++] = input;
+					}
+					break; }
+				default: { 
+					displayData.ErrorFlags |= 1 << 4;
+					break; }
+				 }
 			}
 			else {
-				if (arrK == KEY_DOWN) {
-					data.CurrSelection += 1;
-				}
-				if (arrK == KEY_UP) {
-					data.CurrSelection -= 1;
-				}
+			 displayData.ErrorFlags |= 1 << 0;
 			}
 			break;
 		}
-		case KEY_ESCAPE: {
-			if (AcceptMenu("Wollen sie das Programm beenden?")) {
-				CleanUp(&data);
-				return;
-			}
-			break;
-		}
-		case KEY_ENTER: {
-			switch (data.CurrSelection) {
-			case CONV_DEZ_HEX: {
-				data.ConvMode = true;
-				if (!CheckForInvalidCharackters(data.InputBuffer, data.BufferPosIdx, false)) {
-					data.ErrorMsg = "[Fehler]: Invalid Input";
-				}
-				break;
-			}
-			case CONV_HEX_DEZ: {
-				data.ConvMode = false;
-				break;
-			}
-			case INPUT_NUMBER: {
-				data.ActivInput = true;
-			  InputLoop(&data);
-			  data.ActivInput = false;
-				break;
-			}
-			case END: {
-				if (AcceptMenu("Wollen sie das Programm wirklich beenden?")) {
-					CleanUp(&data);
-					return;
-				}
-				break;
-			}
-			}
-			break;
-		}
+		
+
 		}
 	}
 }
