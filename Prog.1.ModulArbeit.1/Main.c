@@ -21,8 +21,13 @@
 #define INPUT_BUFFER_SIZE   21
 #define LIMIT_DEZIMAL_INPUT 19
 #define LIMIT_HEX_INPUT     16
-#define ERROR_MESSAGE_LIMIT 5
 
+// error state for error message handling
+#define ERROR_MESSAGE_LIMIT 5
+#define INVALID_INPUT_FLAG        1 << 0
+#define EXCEEDS_LIMIT_FLAG        1 << 1
+#define INVALID_INPUT_STRING_FLAG 1 << 2
+#define INVALID_CONV_MOD_FLAG		  1 << 3
 enum STATE {
 	DEZIMAL_TO_HEX_SEL = 0,
 	HEX_TO_DEZIMAL_SEL,
@@ -201,16 +206,16 @@ void GetErrorMessages(int* o_NumOfMsg, char** o_Messages, int errorFlags) {
 		return;
 	}
 	*o_NumOfMsg = 0;
-	if (errorFlags & 1 << 0) {
+	if (errorFlags & INVALID_INPUT_FLAG) {
 		o_Messages[(*o_NumOfMsg)++] = "[Fehler] Fehlerhaften Charakter eingegeben!";
 	}
-	if (errorFlags & 1 << 1) {
+	if (errorFlags & EXCEEDS_LIMIT_FLAG) {
 		o_Messages[(*o_NumOfMsg)++] = "[Fehler] Ueberschreitung des eingabe Limits!";
 	}
-	if (errorFlags & 1 << 2) {
+	if (errorFlags & INVALID_INPUT_STRING_FLAG) {
 		o_Messages[(*o_NumOfMsg)++] = "[Fehler] Ungueltiges Symbole in der Eingabe!";
 	}	
-	if (errorFlags & 1 << 3) {
+	if (errorFlags & INVALID_CONV_MOD_FLAG) {
 		o_Messages[(*o_NumOfMsg)++] = "[Fehler] Ungueltiger Convertierungs Modus!";
 	}
 }
@@ -224,7 +229,7 @@ void DrawMenu(MenuData* displayData) {
 	//to make the draw function more readable, will convert i convmode Enum to a bool.
 	// true = Dec, false = Hex
 	bool isDecMode = displayData->ActivConvMode == DEZIMAL_TO_HEX;
-
+	displayData->InputBuffer[displayData->BufferPosIdx] = '_';
 	system("cls");
 	puts(BG_COLOR "                                                                            ");
 	printf_s("  \x1b(0lqqqqqqqqqqqqqqqqqqqqqqqqqqqqqu \x1b(BConverter\x1b(0 tqqqqqqqqqqqqqqqqqqqqqqqqqqqqk\x1b(B  \n");
@@ -241,17 +246,17 @@ void DrawMenu(MenuData* displayData) {
 	printf_s("  \x1b(0x                                                                      x\x1b(B  \n");
 	printf_s("  \x1b(0x           \x1b(B %23s\x1b(0                                   x\x1b(B  \n", isDecMode ? "0-9" : "0-9, a-f, A-F");
 	printf_s("  \x1b(0x                  lqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk x\x1b(B  \n");
-	printf_s("  \x1b(0x\x1b(B%s%17s %s\x1b(0x\x1b(B %s%.*s\x1b[5m_\x1b[25m%*s                               \x1b(0x x\x1b(B  \n", 
+	printf_s("  \x1b(0x\x1b(B%s%17s %s\x1b(0x\x1b(B %s%-21s                         %s\x1b(0x x\x1b(B  \n", 
 		displayData->CurrSelection == INPUT_NUMBER ? COLOR_SELECTED : "",
 		isDecMode ? "Input Dezimal" : "Input Hex",
 		COLOR_SELECTED_RES BG_COLOR,
 		isDecMode ? "  " : "0x",
-		displayData->BufferPosIdx + 1,
 		displayData->InputBuffer,
-		INPUT_BUFFER_SIZE - displayData->BufferPosIdx,
 		BG_COLOR);
 	printf_s("  \x1b(0x                  mqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj x\x1b(B  \n");
-	//printf_s("  \x1b(0x                  \x1b(B\x1b[0;47;31m%45s\x1b(0      \x1b[0;0m%s x\x1b(B  \n", displayData->ErrorMsg, BG_COLOR);
+	for (int i = 0; i < numOfErros; i++) {
+	  printf_s("  \x1b(0x                  \x1b(B\x1b[0;47;31m%-45s\x1b(0      \x1b[0;0m%s x\x1b(B  \n", errorMessages[i], BG_COLOR);
+	}
 	printf_s("  \x1b(0tqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqu\x1b(B  \n");
 	printf_s("  \x1b(0x                                                                      x\x1b(B  \n");
 	printf_s("  \x1b(0x                  lqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk x\x1b(B  \n");
@@ -323,6 +328,8 @@ void Menu() {
 		DrawMenu(&displayData);
 		int input = _getch();
 		int inSecoundary;
+		// we clear the error flags befor we go back to input so it can be filled a new
+		displayData.ErrorFlags = 0;
 		switch (input) {
 		case KEY_ENTER: {
 			switch (displayData.CurrSelection) {
@@ -346,6 +353,7 @@ void Menu() {
 			if (displayData.BufferPosIdx >= 0) {
 				displayData.InputBuffer[displayData.BufferPosIdx] = '\0';
 				displayData.BufferPosIdx = max(displayData.BufferPosIdx - 1, 0);
+				displayData.InputBuffer[displayData.BufferPosIdx] = '\0';
 			}
 			break;
 		}
@@ -357,7 +365,7 @@ void Menu() {
 			inSecoundary = _getch();
 			int retCode = ArrowKeyHandling(inSecoundary, &displayData.CurrSelection);
 			if (retCode != 1) {
-				displayData.ErrorFlags |= 1 << 0; // set error flag for invalid input character
+				displayData.ErrorFlags |= INVALID_INPUT_FLAG; // set error flag for invalid input character
 			}
 			break;
 		}
@@ -370,24 +378,43 @@ void Menu() {
 					if (writePos < LIMIT_HEX_INPUT) {
 						displayData.InputBuffer[displayData.BufferPosIdx++] = input;
 					}
+					else {
+						displayData.ErrorFlags |= EXCEEDS_LIMIT_FLAG;
+					}
 					break; }
 				case DEZIMAL_TO_HEX: {
 					if (writePos < LIMIT_DEZIMAL_INPUT) {
 						displayData.InputBuffer[displayData.BufferPosIdx++] = input;
 					}
+					else {
+						displayData.ErrorFlags |= EXCEEDS_LIMIT_FLAG;
+					}
 					break; }
 				default: { 
-					displayData.ErrorFlags |= 1 << 4;
+					displayData.ErrorFlags |= INVALID_CONV_MOD_FLAG;
 					break; }
 				 }
 			}
 			else {
-			 displayData.ErrorFlags |= 1 << 0;
+			 displayData.ErrorFlags |= INVALID_INPUT_FLAG;
 			}
 			break;
 		}
-		
+		}
+		// we check if our input is still valid after the new input
+		if (!CheckForInvalidCharackters(displayData.InputBuffer, displayData.BufferPosIdx, displayData.ActivConvMode == HEX_TO_DEZIMAL)) {
+			displayData.ErrorFlags |= INVALID_INPUT_STRING_FLAG;
+		}
 
+		// we update our resul after each key input regadless of anything changed or not;
+		switch (displayData.ActivConvMode) {
+
+		case HEX_TO_DEZIMAL: {
+			ConvHexDez(displayData.InputBuffer, displayData.BufferPosIdx, displayData.ConvResult, &displayData.ConvResulSize);
+			break; }
+		case DEZIMAL_TO_HEX: {
+			ConvDezHex(displayData.InputBuffer, displayData.BufferPosIdx, displayData.ConvResult, &displayData.ConvResulSize);
+			break; }
 		}
 	}
 }
